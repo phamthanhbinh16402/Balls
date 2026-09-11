@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đại Chiến Bi Thần - V2.0</title>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+            background-color: #0d0d11;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        canvas { display: block; }
+
+        /* Nút Tắt/Mở Bảng Debug */
+        #toggle-btn {
+            position: absolute;
+            top: 20px; right: 20px;
+            background: rgba(0, 229, 255, 0.2);
+            color: #00e5ff;
+            border: 1px solid #00e5ff;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 20;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        #toggle-btn:hover { background: rgba(0, 229, 255, 0.4); }
+
+        /* Bảng Debug Control Panel */
+        #debug-panel {
+            position: absolute;
+            top: 60px; right: 20px;
+            background: rgba(18, 18, 26, 0.85);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+            width: 260px;
+            z-index: 10;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            transform: translateX(0);
+            opacity: 1;
+        }
+        #debug-panel.hidden {
+            transform: translateX(120%);
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        #debug-panel h3 { margin: 0 0 12px 0; font-size: 14px; color: #00e5ff; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .input-group { margin-bottom: 15px; }
+        .input-group input {
+            width: 90%;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #555;
+            color: white;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+        }
+        .input-group input:focus { border-color: #00e5ff; }
+
+        .player-group {
+            margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        button.action-btn {
+            background: rgba(255,255,255,0.05); color: #eceff1; border: 1px solid rgba(255,255,255,0.1);
+            padding: 7px 10px; margin: 3px 0; border-radius: 6px; cursor: pointer;
+            width: 100%; text-align: left; font-size: 12px; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        button.action-btn:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); }
+        .btn-rose { border-left: 3px solid #ff4081; }
+        .btn-coin { border-left: 3px solid #ffd700; }
+        .btn-boss { border-left: 3px solid #e040fb; font-weight: bold; }
+        .btn-heart { border-left: 3px solid #ff5252; }
+        .btn-reset { background: #d32f2f; border: none; margin-top: 10px; font-weight: bold; justify-content: center; width: 100%; padding: 10px; color: white; border-radius: 6px; cursor: pointer;}
+        .btn-reset:hover { background: #f44336; }
+    </style>
+</head>
+<body>
+
+    <button id="toggle-btn" onclick="toggleDebug()">⚙️ Ẩn/Hiện Debug</button>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="debug-panel">
+        <h3>🛠️ Simulator Control</h3>
+        
+        <div class="input-group">
+            <input type="text" id="playerNameInput" placeholder="Nhập tên người chơi..." value="Player 1">
+        </div>
+
+        <div class="player-group">
+            <button class="action-btn btn-rose" onclick="triggerAction('gift', 1)">🌹 Tặng 1 Rose <span>(1 Xu)</span></button>
+            <button class="action-btn btn-coin" onclick="triggerAction('gift', 5)">💵 Tặng Quà <span>(5 Xu)</span></button>
+            <button class="action-btn btn-boss" onclick="triggerAction('gift', 100)">🦁 Tặng Sư Tử <span>(100 Xu)</span></button>
+            <button class="action-btn btn-boss" onclick="triggerAction('gift', 300)">🚀 Tặng Vũ Trụ <span>(3 Boss)</span></button>
+            <button class="action-btn btn-heart" onclick="triggerAction('like', 0)">❤️ Thả Tim <span>(Buff + Heal)</span></button>
+        </div>
+
+        <button class="btn-reset" onclick="marbles = []; effects = [];">🧨 Reset Màn Chơi</button>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Toggle Debug Panel
+    function toggleDebug() {
+        const panel = document.getElementById('debug-panel');
+        panel.classList.toggle('hidden');
+    }
+
+    let marbles = [];
+    let effects = []; // Chứa cả pháo hoa nổ, tia lửa và text hồi máu
+
+    // Tạo màu đồng nhất từ tên
+    function stringToColor(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        let color = '#';
+        for (let i = 0; i < 3; i++) {
+            let value = (hash >> (i * 8)) & 0xFF;
+            color += ('00' + value.toString(16)).substr(-2);
+        }
+        return color;
+    }
+
+    // Class quản lý các hiệu ứng hình ảnh (VFX)
+    class VisualEffect {
+        constructor(x, y, color, type) {
+            this.x = x; this.y = y; this.color = color; this.type = type;
+            this.alpha = 1;
+            
+            if (type === 'explosion') {
+                this.radius = Math.random() * 4 + 2;
+                this.vx = (Math.random() - 0.5) * 12;
+                this.vy = (Math.random() - 0.5) * 12;
+                this.decay = 0.02;
+            } else if (type === 'spark') {
+                this.radius = Math.random() * 2 + 1;
+                this.vx = (Math.random() - 0.5) * 8;
+                this.vy = (Math.random() - 0.5) * 8;
+                this.decay = 0.05; // Tắt nhanh hơn
+            } else if (type === 'heal') {
+                this.vx = 0;
+                this.vy = -1 - Math.random(); // Bay lên trên
+                this.decay = 0.02;
+            }
+        }
+        draw(ctx) {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, this.alpha);
+            
+            if (this.type === 'heal') {
+                ctx.fillStyle = "#00ff00";
+                ctx.font = "bold 16px sans-serif";
+                ctx.shadowColor = "#00ff00"; ctx.shadowBlur = 5;
+                ctx.fillText("+", this.x, this.y);
+            } else {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+        update() {
+            this.x += this.vx; this.y += this.vy;
+            this.alpha -= this.decay;
+        }
+    }
+
+    class Marble {
+        constructor(name, coinValue) {
+            this.name = name;
+            this.color = stringToColor(name);
+            
+            if (coinValue >= 100) {
+                this.radius = 55; this.maxHp = 1200; this.mass = 120;
+            } else if (coinValue >= 50) {
+                this.radius = 38; this.maxHp = 600; this.mass = 50;
+            } else if (coinValue >= 5) {
+                this.radius = 24; this.maxHp = 250; this.mass = 20;
+            } else { 
+                this.radius = 14; this.maxHp = 100; this.mass = 10;
+            }
+            
+            this.hp = this.maxHp;
+            this.x = Math.random() * (canvas.width - 200) + 100;
+            this.y = -this.radius - 20;
+            this.vx = (Math.random() - 0.5) * 6;
+            this.vy = Math.random() * 4 + 2;
+            this.angle = 0; 
+        }
+
+        draw(ctx) {
+            ctx.save();
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 15;
+
+            // Hào quang Boss
+            if (this.mass >= 120) {
+                this.angle += 0.02;
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle);
+                ctx.strokeStyle = "#ffd700";
+                ctx.lineWidth = 3;
+                ctx.setLineDash([10, 15]);
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius + 8, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Vẽ Bi
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = this.mass >= 120 ? '#ffd700' : '#ffffff';
+            ctx.stroke();
+            ctx.restore(); 
+
+            // Vẽ Tên
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 12px sans-serif";
+            ctx.textAlign = "center";
+            ctx.shadowColor = "black"; ctx.shadowBlur = 4;
+            ctx.fillText(this.name, this.x, this.y - this.radius - 14);
+
+            // Vẽ Thanh Máu
+            let hpBarWidth = Math.max(this.radius * 2, 30);
+            let hpBarHeight = 5;
+            let hpPercent = Math.max(0, this.hp / this.maxHp);
+            
+            ctx.fillStyle = "rgba(255, 0, 0, 0.7)";
+            ctx.fillRect(this.x - hpBarWidth / 2, this.y - this.radius - 8, hpBarWidth, hpBarHeight);
+            ctx.fillStyle = "#00e676";
+            ctx.fillRect(this.x - hpBarWidth / 2, this.y - this.radius - 8, hpBarWidth * hpPercent, hpBarHeight);
+
+            // Vương miện
+            if (this.mass >= 120) {
+                ctx.font = "16px sans-serif";
+                ctx.fillText("👑", this.x, this.y - this.radius - 28);
+            }
+        }
+
+        update() {
+            let centerX = canvas.width / 2;
+            let centerY = canvas.height / 2;
+            this.vx += (centerX - this.x) * 0.00004;
+            this.vy += (centerY - this.y) * 0.00004;
+
+            this.vx *= 0.985;
+            this.vy *= 0.985;
+
+            this.x += this.vx;
+            this.y += this.vy;
+
+            if (this.x - this.radius < 0) { this.x = this.radius; this.vx *= -0.8; }
+            if (this.x + this.radius > canvas.width) { this.x = canvas.width - this.radius; this.vx *= -0.8; }
+            if (this.y - this.radius < 0) { this.y = this.radius; this.vy *= -0.8; }
+            if (this.y + this.radius > canvas.height) { this.y = canvas.height - this.radius; this.vy *= -0.8; }
+        }
+    }
+
+    // Hàm gọi khi bấm nút trên giao diện
+    function triggerAction(type, value) {
+        let inputVal = document.getElementById('playerNameInput').value.trim();
+        let playerName = inputVal !== "" ? inputVal : "Khách";
+        handleAction(playerName, type, value);
+    }
+
+    function handleAction(playerName, type, value) {
+        if (type === 'gift') {
+            // Hồi FULL máu cho quân cũ và tạo hiệu ứng Heal
+            marbles.forEach(m => { 
+                if (m.name === playerName && m.hp < m.maxHp) {
+                    m.hp = m.maxHp; 
+                    createVFX(m.x, m.y - m.radius, '#00ff00', 'heal', 5);
+                } 
+            });
+
+            // Sinh quân mới
+            let remainingCoins = value;
+            while (remainingCoins >= 100) {
+                marbles.push(new Marble(playerName, 100));
+                remainingCoins -= 100;
+            }
+            if (remainingCoins > 0) {
+                marbles.push(new Marble(playerName, remainingCoins));
+            }
+        } 
+        else if (type === 'like') {
+            marbles.forEach(m => {
+                if (m.name === playerName) {
+                    if(m.hp < m.maxHp) createVFX(m.x, m.y - m.radius, '#00ff00', 'heal', 3);
+                    m.hp = Math.min(m.maxHp, m.hp + (m.maxHp * 0.15));
+                    m.vx += (Math.random() - 0.5) * 12;
+                    m.vy += (Math.random() - 0.5) * 12;
+                }
+            });
+        }
+    }
+
+    function resolveCollision() {
+        for (let i = 0; i < marbles.length; i++) {
+            for (let j = i + 1; j < marbles.length; j++) {
+                let m1 = marbles[i];
+                let m2 = marbles[j];
+
+                if (m1.name === m2.name) continue;
+
+                let dx = m2.x - m1.x;
+                let dy = m2.y - m1.y;
+                let distance = Math.hypot(dx, dy);
+                let minDist = m1.radius + m2.radius;
+
+                if (distance < minDist) {
+                    let overlap = minDist - distance;
+                    let nx = dx / distance;
+                    let ny = dy / distance;
+                    
+                    let totalMass = m1.mass + m2.mass;
+                    let ratio1 = m2.mass / totalMass;
+                    let ratio2 = m1.mass / totalMass;
+
+                    m1.x -= nx * overlap * ratio1;
+                    m1.y -= ny * overlap * ratio1;
+                    m2.x += nx * overlap * ratio2;
+                    m2.y += ny * overlap * ratio2;
+
+                    // Tính dame trừ máu
+                    m1.hp -= m2.mass * 0.08; 
+                    m2.hp -= m1.mass * 0.08;
+
+                    // Tạo tia lửa tại điểm va chạm
+                    let contactX = m1.x + nx * m1.radius;
+                    let contactY = m1.y + ny * m1.radius;
+                    createVFX(contactX, contactY, '#ffeb3b', 'spark', 3);
+
+                    m1.vx -= nx * ratio1 * 3;
+                    m1.vy -= ny * ratio1 * 3;
+                    m2.vx += nx * ratio2 * 3;
+                    m2.vy += ny * ratio2 * 3;
+                }
+            }
+        }
+    }
+
+    // Hàm tạo VFX chung
+    function createVFX(x, y, color, type, count = 10) {
+        for (let i = 0; i < count; i++) {
+            let offset_x = x + (Math.random() - 0.5) * 10;
+            let offset_y = y + (Math.random() - 0.5) * 10;
+            effects.push(new VisualEffect(offset_x, offset_y, color, type));
+        }
+    }
+
+    function gameLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Bi
+        marbles.forEach(m => { m.update(); m.draw(ctx); });
+
+        // Hiệu ứng
+        effects.forEach((e, index) => {
+            e.update(); e.draw(ctx);
+            if (e.alpha <= 0) effects.splice(index, 1);
+        });
+
+        resolveCollision();
+
+        // Bi chết nổ
+        marbles.forEach(m => {
+            if (m.hp <= 0) createVFX(m.x, m.y, m.color, 'explosion', m.mass >= 120 ? 40 : 15);
+        });
+        marbles = marbles.filter(m => m.hp > 0);
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+</script>
+</body>
+</html>
