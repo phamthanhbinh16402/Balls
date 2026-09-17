@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📱 Admin Controller</title>
+    <style>
+        body {
+            background-color: #1a1a24; color: white;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 20px;
+        }
+        .panel {
+            background: rgba(255,255,255,0.05); padding: 25px;
+            border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);
+            width: 100%; max-width: 400px;
+        }
+        h2 { text-align: center; color: #00e5ff; margin-top: 0; }
+        input {
+            width: 95%; padding: 12px; margin-bottom: 20px;
+            background: #0d0d11; border: 1px solid #555; color: white;
+            border-radius: 8px; font-size: 16px; outline: none;
+        }
+        input:focus { border-color: #00e5ff; }
+        button {
+            width: 100%; padding: 15px; margin-bottom: 10px;
+            border: none; border-radius: 8px; font-size: 16px; font-weight: bold;
+            cursor: pointer; transition: 0.2s; color: white;
+        }
+        button:active { transform: scale(0.95); }
+        .btn-l { background: #3f51b5; } .btn-l:hover { background: #5c6bc0; }
+        .btn-b { background: #9c27b0; } .btn-b:hover { background: #ab47bc; }
+        .btn-r { background: #d32f2f; margin-top: 20px;} .btn-r:hover { background: #f44336; }
+    </style>
+</head>
+<body>
+
+    <div class="panel">
+        <h2>🎮 BẢNG ĐIỀU KHIỂN BOSS</h2>
+        <p style="font-size: 14px; color: #aaa; text-align:center;">
+            (Nhập tên người chơi muốn Cheat và bấm nút. Lệnh sẽ bắn thẳng sang tab game bên kia)
+        </p>
+
+        <label>Tên Người Chơi (hoặc tên Boss tự tạo):</label>
+        <input type="text" id="pName" placeholder="VD: Hacker_99" value="Thần Chết">
+
+        <button class="btn-l" onclick="sendCommand('gift', 50)">😈 Thả đệ tử chặn đường (50 Xu)</button>
+        <button class="btn-b" onclick="sendCommand('gift', 300)">🚀 CỨU GIÁ! THẢ 3 BOSS (300 Xu)</button>
+        <button class="btn-l" style="background:#00c853;" onclick="sendCommand('like', 0)">💖 Buff tốc độ & Hồi máu</button>
+        
+        <button class="btn-r" onclick="sendCommand('reset', 0)">🧨 CLEAR MAP (XÓA SẠCH BI)</button>
+    </div>
+
+<script>
+    // Hàm này sẽ ghi lệnh vào bộ nhớ tạm của trình duyệt
+    // File game.html đang mở ở tab khác sẽ ngay lập tức "nghe" thấy lệnh này và thực hiện
+    function sendCommand(actionType, value) {
+        const playerName = document.getElementById('pName').value.trim() || "Admin";
+        
+        const payload = {
+            id: Date.now(), // Thêm ID thời gian để đảm bảo mỗi lần bấm là 1 lệnh mới
+            playerName: playerName,
+            type: actionType,
+            value: value
+        };
+
+        // Ghi vào localStorage
+        localStorage.setItem('admin_cheat_command', JSON.stringify(payload));
+        
+        // Đổi màu nền nhẹ để báo hiệu bấm thành công
+        document.body.style.backgroundColor = "#2a4d2c";
+        setTimeout(() => document.body.style.backgroundColor = "#1a1a24", 200);
+    }
+</script>
+</body>
+</html>
