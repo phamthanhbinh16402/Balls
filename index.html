@@ -66,7 +66,7 @@
         }
         update() {
             this.vx += (canvas.width / 2 - this.x) * 0.00004; this.vy += (canvas.height / 2 - this.y) * 0.00004;
-            this.vx *= 0.985; this.vy *= 0.985; this.x += this.vx; this.y += this.vy;
+            this.vx *= 1; this.vy *= 1; this.x += this.vx; this.y += this.vy;
             if (this.x - this.radius < 0) { this.x = this.radius; this.vx *= -0.8; }
             if (this.x + this.radius > canvas.width) { this.x = canvas.width - this.radius; this.vx *= -0.8; }
             if (this.y - this.radius < 0) { this.y = this.radius; this.vy *= -0.8; }
