@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ball V3 - Epic Effects</title>
+    <title>Ball V3 - Avatar & Floating Damage</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0d0d11; font-family: sans-serif; }
         canvas { display: block; }
@@ -18,13 +18,40 @@
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     window.addEventListener('resize', resize); resize();
 
-    let marbles = []; let effects = [];
+    let marbles = []; let effects = []; let floatingTexts = [];
 
-    // Tạo màu ngẫu nhiên nhưng đậm đà dựa trên tên
+    // Tạo màu ngẫu nhiên dựa trên tên (Dùng làm viền hoặc màu nền nếu không có avatar)
     function stringToColor(str) {
         let hash = 0; for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
         let color = '#'; for (let i = 0; i < 3; i++) color += ('00' + ((hash >> (i * 8)) & 0xFF).toString(16)).substr(-2);
         return color;
+    }
+
+    // Lớp hiển thị số máu nảy lên (Damage / Heal)
+    class FloatingText {
+        constructor(x, y, text, color) {
+            this.x = x + (Math.random() - 0.5) * 20; 
+            this.y = y - 10; 
+            this.text = text; 
+            this.color = color;
+            this.alpha = 1; 
+            this.vy = -1.5 - Math.random(); // Bay lên ngẫu nhiên
+            this.decay = 0.02; // Tốc độ mờ
+        }
+        update() { this.y += this.vy; this.alpha -= this.decay; }
+        draw(ctx) {
+            ctx.save(); 
+            ctx.globalAlpha = Math.max(0, this.alpha);
+            ctx.font = "bold 20px sans-serif";
+            ctx.textAlign = "center";
+            // Vẽ viền đen cho chữ để dễ nhìn trên mọi nền
+            ctx.strokeStyle = "black"; ctx.lineWidth = 3; 
+            ctx.strokeText(this.text, this.x, this.y);
+            // Vẽ màu chữ
+            ctx.fillStyle = this.color; 
+            ctx.fillText(this.text, this.x, this.y);
+            ctx.restore();
+        }
     }
 
     class VisualEffect {
@@ -34,21 +61,20 @@
             else if (type === 'spark') { this.radius = Math.random() * 2 + 2; this.vx = (Math.random() - 0.5) * 10; this.vy = (Math.random() - 0.5) * 10; this.decay = 0.04; } 
             else if (type === 'heal') { this.vx = 0; this.vy = -1.5 - Math.random(); this.decay = 0.025; }
             else if (type === 'nuke') { this.radius = Math.random() * 15 + 10; this.vx = (Math.random() - 0.5) * 40; this.vy = (Math.random() - 0.5) * 40; this.decay = 0.015; }
-            else if (type === 'shockwave') { this.radius = 10; this.vx = 0; this.vy = 0; this.decay = 0.035; } // Hiệu ứng sóng nổ mới
+            else if (type === 'shockwave') { this.radius = 10; this.vx = 0; this.vy = 0; this.decay = 0.035; }
         }
         draw(ctx) {
             ctx.save(); ctx.globalAlpha = Math.max(0, this.alpha);
             
             if (this.type === 'heal') { 
-                ctx.fillStyle = "#00ff00"; ctx.font = "bold 24px sans-serif"; // Làm dấu + to hơn
+                ctx.fillStyle = "#00ff00"; ctx.font = "bold 24px sans-serif"; 
                 ctx.shadowColor = "#00ff00"; ctx.shadowBlur = 8; ctx.fillText("+", this.x, this.y); 
             } 
             else if (this.type === 'shockwave') {
-                // Sóng xung kích quét ra ngoài
                 ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
                 ctx.strokeStyle = this.color; ctx.lineWidth = 6 * this.alpha; 
                 ctx.shadowColor = this.color; ctx.shadowBlur = 15; ctx.stroke();
-                this.radius += 10; // Tốc độ lan rộng
+                this.radius += 10; 
             }
             else { 
                 ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); 
@@ -60,7 +86,7 @@
     }
 
     class Marble {
-        constructor(name, coinValue) {
+        constructor(name, coinValue, avatarUrl = "") {
             this.name = name; this.color = stringToColor(name);
             this.coinValue = coinValue;
             
@@ -73,62 +99,74 @@
             this.hp = this.maxHp; this.x = Math.random() * (canvas.width - 200) + 100; this.y = -this.radius - 20;
             this.vx = (Math.random() - 0.5) * 6; this.vy = Math.random() * 4 + 2; 
             
-            this.angle = 0; // Trục quay
-            this.pulse = Math.random() * Math.PI; // Nhịp đập hào quang ngẫu nhiên
+            this.angle = 0; 
+            this.pulse = Math.random() * Math.PI; 
+
+            // Logic xử lý ảnh Avatar
+            this.avatarLoaded = false;
+            this.img = new Image();
+            if (avatarUrl) {
+                this.img.crossOrigin = "Anonymous"; // Giúp tránh lỗi chặn lấy ảnh chéo domain
+                this.img.src = avatarUrl;
+                this.img.onload = () => { this.avatarLoaded = true; };
+            }
         }
         
         draw(ctx) {
             ctx.save();
-            
             this.pulse += 0.05; 
-            let pulseVal = (Math.sin(this.pulse) + 1) / 2; // Giá trị từ 0 đến 1
+            let pulseVal = (Math.sin(this.pulse) + 1) / 2;
 
-            // 1. TIER 20, 30, 100: Hào quang nhịp đập (Pulsing Aura) lan tỏa xung quanh
+            // 1. Hào quang nhịp đập (20, 30, 100)
             if (this.coinValue >= 20) {
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius + 5 + (pulseVal * 12), 0, Math.PI * 2);
-                ctx.fillStyle = this.color;
-                ctx.globalAlpha = 0.3 * (1 - pulseVal); // Mờ dần khi to ra
-                ctx.fill();
-                ctx.globalAlpha = 1; // reset alpha
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.radius + 5 + (pulseVal * 12), 0, Math.PI * 2);
+                ctx.fillStyle = this.color; ctx.globalAlpha = 0.3 * (1 - pulseVal); ctx.fill();
+                ctx.globalAlpha = 1; 
             }
 
-            // 2. TIER 30, 100: Vòng xoáy ma thuật
+            // 2. Vòng xoáy ma thuật (30, 100)
             if (this.coinValue >= 30) {
                 this.angle += 0.02; 
                 ctx.save(); ctx.translate(this.x, this.y); 
                 
-                // Vòng 1 (Quay cùng chiều)
                 ctx.rotate(this.angle); 
                 ctx.strokeStyle = this.coinValue >= 100 ? "#ff9800" : "#00e5ff"; 
                 ctx.lineWidth = 3; ctx.setLineDash([12, 12]); 
                 ctx.beginPath(); ctx.arc(0, 0, this.radius + 10, 0, Math.PI * 2); 
                 ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 10; ctx.stroke();
                 
-                // Vòng 2 (Quay ngược chiều, chỉ dành cho tier 100 xu)
                 if (this.coinValue >= 100) {
-                    ctx.rotate(-this.angle * 2.5); // Quay ngược và nhanh hơn
-                    ctx.strokeStyle = "#fff176"; 
-                    ctx.lineWidth = 4; ctx.setLineDash([8, 18]); 
+                    ctx.rotate(-this.angle * 2.5); 
+                    ctx.strokeStyle = "#fff176"; ctx.lineWidth = 4; ctx.setLineDash([8, 18]); 
                     ctx.beginPath(); ctx.arc(0, 0, this.radius + 18, 0, Math.PI * 2); ctx.stroke();
                 }
                 ctx.restore();
             }
 
-            // 3. VẼ THÂN BI CHÍNH
-            ctx.shadowColor = this.color; 
-            ctx.shadowBlur = this.mass / 4; 
+            // 3. VẼ THÂN BI VÀ AVATAR
+            ctx.save();
             ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); 
-            ctx.fillStyle = this.color; ctx.fill(); 
-            ctx.lineWidth = this.coinValue >= 100 ? 3 : 2; 
-            ctx.strokeStyle = this.coinValue >= 100 ? '#ff9800' : '#ffffff'; 
-            ctx.stroke(); 
-            ctx.shadowBlur = 0; // Tắt shadow để vẽ các chi tiết bên trong sắc nét
+            ctx.clip(); // Cắt mọi thứ bên trong thành hình tròn
 
-            // 4. TIER 5 TRỞ LÊN: Vòng sáng mờ bên trong (Inner Glow) tạo độ sâu 3D
+            if (this.avatarLoaded) {
+                // Nếu có ảnh, vẽ ảnh vào
+                ctx.drawImage(this.img, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+            } else {
+                // Nếu không có ảnh, đổ màu mặc định
+                ctx.fillStyle = this.color; ctx.fill();
+            }
+            ctx.restore();
+
+            // Vẽ viền ngoài cho sắc nét và nhận diện màu team
+            ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); 
+            ctx.lineWidth = this.coinValue >= 100 ? 3 : 2; 
+            ctx.strokeStyle = this.coinValue >= 100 ? '#ff9800' : this.color; // Viền trùng màu nhận diện
+            ctx.stroke(); 
+
+            // 4. Vòng sáng mờ bên trong tạo hiệu ứng 3D
             if (this.coinValue >= 5) {
                 ctx.beginPath(); ctx.arc(this.x, this.y, this.radius * 0.65, 0, Math.PI * 2);
-                ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.lineWidth = 2; ctx.stroke();
+                ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.lineWidth = 2; ctx.stroke();
             }
             ctx.restore();
             
@@ -160,41 +198,52 @@
         for (let i = 0; i < count; i++) effects.push(new VisualEffect(x + (Math.random() - 0.5) * 10, y + (Math.random() - 0.5) * 10, color, type));
     }
 
-    function handleAction(playerName, type, value) {
+    // Thêm tham số avatarUrl
+    function handleAction(playerName, type, value, avatarUrl = "") {
         if (type === 'gift') {
-            marbles.forEach(m => { if (m.name === playerName && m.hp < m.maxHp) { m.hp = m.maxHp; createVFX(m.x, m.y - m.radius, '#00ff00', 'heal', 5); } });
+            marbles.forEach(m => { 
+                if (m.name === playerName && m.hp < m.maxHp) { 
+                    let healAmt = m.maxHp - m.hp;
+                    m.hp = m.maxHp; 
+                    floatingTexts.push(new FloatingText(m.x, m.y, "+" + Math.round(healAmt), "#00ff00")); // Số máu hồi nảy lên
+                } 
+            });
             let remain = value;
             
             // BOOM NGUYÊN TỬ
             while (remain >= 200) {
                 marbles.forEach(m => {
-                    m.hp *= 0.2; 
+                    let dmg = m.hp * 0.8; // Tính lượng sát thương 80%
+                    m.hp -= dmg; 
+                    floatingTexts.push(new FloatingText(m.x, m.y, "-" + Math.round(dmg), "#ff3d00")); // Số sát thương nổ nảy lên
+                    
                     createVFX(m.x, m.y, '#ff3d00', 'explosion', 15);
-                    // Tạo sóng xung kích nhỏ tại vị trí mỗi bi khi dính nuke
                     createVFX(m.x, m.y, '#ff3d00', 'shockwave', 1);
                 });
                 createVFX(canvas.width/2, canvas.height/2, '#ff0000', 'nuke', 150);
                 createVFX(canvas.width/2, canvas.height/2, '#ffeb3b', 'explosion', 100);
-                createVFX(canvas.width/2, canvas.height/2, '#ff3d00', 'shockwave', 1); // Sóng xung kích khổng lồ
+                createVFX(canvas.width/2, canvas.height/2, '#ff3d00', 'shockwave', 1);
                 remain -= 200;
             }
 
-            while (remain >= 100) { marbles.push(new Marble(playerName, 100)); remain -= 100; }
-            while (remain >= 30) { marbles.push(new Marble(playerName, 30)); remain -= 30; }
-            while (remain >= 20) { marbles.push(new Marble(playerName, 20)); remain -= 20; }
-            while (remain >= 5) { marbles.push(new Marble(playerName, 5)); remain -= 5; }
-            while (remain >= 1) { marbles.push(new Marble(playerName, 1)); remain -= 1; }
+            while (remain >= 100) { marbles.push(new Marble(playerName, 100, avatarUrl)); remain -= 100; }
+            while (remain >= 30) { marbles.push(new Marble(playerName, 30, avatarUrl)); remain -= 30; }
+            while (remain >= 20) { marbles.push(new Marble(playerName, 20, avatarUrl)); remain -= 20; }
+            while (remain >= 5) { marbles.push(new Marble(playerName, 5, avatarUrl)); remain -= 5; }
+            while (remain >= 1) { marbles.push(new Marble(playerName, 1, avatarUrl)); remain -= 1; }
 
         } else if (type === 'like') {
             marbles.forEach(m => { 
                 if (m.name === playerName) { 
-                    if(m.hp < m.maxHp) createVFX(m.x, m.y - m.radius, '#00ff00', 'heal', 3); 
-                    m.hp = Math.min(m.maxHp, m.hp + (m.maxHp * 0.1));
+                    if(m.hp < m.maxHp) {
+                        m.hp = Math.min(m.maxHp, m.hp + 5); 
+                        floatingTexts.push(new FloatingText(m.x, m.y, "+5", "#00ff00")); // Hiện số +5 máu
+                    }
                     m.vx += (Math.random() - 0.5) * 12; m.vy += (Math.random() - 0.5) * 12; 
                 } 
             });
         } else if (type === 'reset') {
-            marbles = []; effects = []; 
+            marbles = []; effects = []; floatingTexts = [];
         }
     }
 
@@ -202,13 +251,24 @@
         for (let i = 0; i < marbles.length; i++) {
             for (let j = i + 1; j < marbles.length; j++) {
                 let m1 = marbles[i], m2 = marbles[j];
-                if (m1.name === m2.name) continue;
+                if (m1.name === m2.name) continue; // Cùng chủ thì không tông nhau mất máu
                 let dx = m2.x - m1.x, dy = m2.y - m1.y, dist = Math.hypot(dx, dy), minDist = m1.radius + m2.radius;
+                
                 if (dist < minDist) {
                     let overlap = minDist - dist, nx = dx / dist, ny = dy / dist, totalMass = m1.mass + m2.mass;
                     let r1 = m2.mass / totalMass, r2 = m1.mass / totalMass;
                     m1.x -= nx * overlap * r1; m1.y -= ny * overlap * r1; m2.x += nx * overlap * r2; m2.y += ny * overlap * r2;
-                    m1.hp -= m2.mass * 0.08; m2.hp -= m1.mass * 0.08;
+                    
+                    let dmg1 = m2.mass * 0.08;
+                    let dmg2 = m1.mass * 0.08;
+                    
+                    m1.hp -= dmg1; 
+                    m2.hp -= dmg2;
+                    
+                    // Nảy số damage khi va chạm
+                    floatingTexts.push(new FloatingText(m1.x, m1.y, "-" + Math.round(dmg1), "#ffeb3b"));
+                    floatingTexts.push(new FloatingText(m2.x, m2.y, "-" + Math.round(dmg2), "#ffeb3b"));
+
                     createVFX(m1.x + nx * m1.radius, m1.y + ny * m1.radius, '#ffeb3b', 'spark', 4);
                     m1.vx -= nx * r1 * 3; m1.vy -= ny * r1 * 3; m2.vx += nx * r2 * 3; m2.vy += ny * r2 * 3;
                 }
@@ -220,18 +280,19 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         marbles.forEach(m => { m.update(); m.draw(ctx); });
+        
+        // Vẽ hiệu ứng cháy nổ
         effects.forEach((e, index) => { e.update(); e.draw(ctx); if (e.alpha <= 0) effects.splice(index, 1); });
+        
+        // Vẽ text nảy lên
+        floatingTexts.forEach((t, index) => { t.update(); t.draw(ctx); if (t.alpha <= 0) floatingTexts.splice(index, 1); });
+
         resolveCollision();
         
         marbles.forEach(m => { 
             if (m.hp <= 0) {
-                // Hạt văng ra khi nổ
                 createVFX(m.x, m.y, m.color, 'explosion', Math.floor(m.mass / 2));
-                
-                // Nếu bi từ 20 xu trở lên chết, phát ra sóng xung kích (Shockwave)
-                if (m.coinValue >= 20) {
-                    createVFX(m.x, m.y, m.color, 'shockwave', 1);
-                }
+                if (m.coinValue >= 20) { createVFX(m.x, m.y, m.color, 'shockwave', 1); }
             } 
         });
         
@@ -246,12 +307,12 @@
     window.addEventListener('storage', (event) => {
         if (event.key === 'admin_cheat_command') {
             const data = JSON.parse(event.newValue);
-            handleAction(data.playerName, data.type, data.value);
+            handleAction(data.playerName, data.type, data.value); // Lệnh admin không có avatar, sẽ tự dùng màu
         }
     });
 
     // ==========================================
-// 2. KẾT NỐI TIKFINITY WEBSOCKET CHUẨN
+    // 2. KẾT NỐI TIKFINITY WEBSOCKET CHUẨN
     // ==========================================
     const TIKFINITY_WS_URL = "ws://localhost:21213/"; 
     function connectTikFinity() {
@@ -259,32 +320,25 @@
         
         ws.onopen = () => { 
             console.log("✅ Đã kết nối thành công với TikFinity Event API!");
-            createVFX(canvas.width/2, canvas.height/2, '#00ff00', 'heal', 20); 
         };
         
         ws.onmessage = (event) => {
             const parsedData = JSON.parse(event.data);
-            
-            // Lấy tên sự kiện (vd: "gift", "like")
             const eventType = parsedData.event; 
             
-            // Bỏ qua nếu dữ liệu không đúng cấu trúc của TikFinity
             if (!eventType || !parsedData.data) return; 
-            
-            // payload chính là cục "data" chứa thông tin chi tiết (uniqueId, nickname, diamondCount...)
             const payload = parsedData.data; 
             const playerName = payload.nickname || payload.uniqueId || "Người Ẩn Danh";
+            
+            // Lấy URL Avatar (phổ biến nhất trên TikFinity là profilePictureUrl)
+            const avatarUrl = payload.profilePictureUrl || payload.avatarUrl || "";
 
             if (eventType === 'gift') {
-                // Tùy theo chuẩn của TikFinity, số xu có thể nằm ở diamondCount hoặc cost
                 const coinValue = payload.diamondCount || payload.coinCount || payload.cost || 1;
-                handleAction(playerName, 'gift', coinValue);
-                console.log(`🎁 ${playerName} đã tặng quà trị giá ${coinValue} xu!`);
+                handleAction(playerName, 'gift', coinValue, avatarUrl); // Truyền avatarUrl vào
             }
-            
             if (eventType === 'like') {
-                handleAction(playerName, 'like', 0);
-                console.log(`❤️ ${playerName} đã thả like!`);
+                handleAction(playerName, 'like', 0, avatarUrl);
             }
         };
         
@@ -292,10 +346,7 @@
             console.log("❌ Mất kết nối TikFinity. Đang thử lại...");
             setTimeout(connectTikFinity, 5000); 
         };
-        
-        ws.onerror = () => { 
-            ws.close(); 
-        };
+        ws.onerror = () => { ws.close(); };
     }
     connectTikFinity();
 </script>
