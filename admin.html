@@ -31,7 +31,9 @@
         button:active { transform: scale(0.95); }
         .btn-l { background: #3f51b5; } .btn-l:hover { background: #5c6bc0; }
         .btn-b { background: #9c27b0; } .btn-b:hover { background: #ab47bc; }
-        .btn-r { background: #d32f2f; margin-top: 20px;} .btn-r:hover { background: #f44336; }
+        .btn-legendary { background: #ff9800; color: #000; } .btn-legendary:hover { background: #ffb74d; }
+        .btn-nuke { background: #d32f2f; margin-top: 20px; border: 2px solid #ff5252; box-shadow: 0 0 10px red; } .btn-nuke:hover { background: #f44336; }
+        .btn-clear { background: #555; margin-top: 10px; } .btn-clear:hover { background: #777; }
     </style>
 </head>
 <body>
@@ -43,33 +45,35 @@
         </p>
 
         <label>Tên Người Chơi (hoặc tên Boss tự tạo):</label>
-        <input type="text" id="pName" placeholder="VD: Hacker_99" value="Thần Chết">
+        <input type="text" id="pName" placeholder="VD: Erica" value="Erica">
 
-        <button class="btn-l" onclick="sendCommand('gift', 50)">😈 Thả đệ tử chặn đường (50 Xu)</button>
-        <button class="btn-b" onclick="sendCommand('gift', 300)">🚀 CỨU GIÁ! THẢ 3 BOSS (300 Xu)</button>
+        <button class="btn-l" onclick="sendCommand('gift', 1)">Thả Bi Nhỏ (1 Xu)</button>
+        <button class="btn-l" onclick="sendCommand('gift', 5)">Thả Bi Vừa (5 Xu)</button>
+        <button class="btn-b" onclick="sendCommand('gift', 20)">😈 Thả Bi Lớn (20 Xu)</button>
+        <button class="btn-b" onclick="sendCommand('gift', 30)">😈 Thả Bi Cực Lớn (30 Xu)</button>
+        <button class="btn-legendary" onclick="sendCommand('gift', 100)">👑 THẢ BOSS HUYỀN THOẠI (100 Xu)</button>
+
+        <button class="btn-nuke" onclick="sendCommand('gift', 200)">🚀 BOOM NGUYÊN TỬ (-90% Máu) (200 Xu)</button>
+
         <button class="btn-l" style="background:#00c853;" onclick="sendCommand('like', 0)">💖 Buff tốc độ & Hồi máu</button>
         
-        <button class="btn-r" onclick="sendCommand('reset', 0)">🧨 CLEAR MAP (XÓA SẠCH BI)</button>
+        <button class="btn-clear" onclick="sendCommand('reset', 0)">🧨 CLEAR MAP (XÓA SẠCH BI)</button>
     </div>
 
 <script>
-    // Hàm này sẽ ghi lệnh vào bộ nhớ tạm của trình duyệt
-    // File game.html đang mở ở tab khác sẽ ngay lập tức "nghe" thấy lệnh này và thực hiện
     function sendCommand(actionType, value) {
         const playerName = document.getElementById('pName').value.trim() || "Admin";
         
         const payload = {
-            id: Date.now(), // Thêm ID thời gian để đảm bảo mỗi lần bấm là 1 lệnh mới
+            id: Date.now(),
             playerName: playerName,
             type: actionType,
             value: value
         };
 
-        // Ghi vào localStorage
         localStorage.setItem('admin_cheat_command', JSON.stringify(payload));
         
-        // Đổi màu nền nhẹ để báo hiệu bấm thành công
-        document.body.style.backgroundColor = "#2a4d2c";
+        document.body.style.backgroundColor = actionType === 'gift' && value === 200 ? "#4a0000" : "#2a4d2c";
         setTimeout(() => document.body.style.backgroundColor = "#1a1a24", 200);
     }
 </script>
